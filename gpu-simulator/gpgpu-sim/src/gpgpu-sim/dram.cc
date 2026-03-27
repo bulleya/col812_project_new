@@ -40,6 +40,11 @@
 #include "l2cache.h"
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
+#include <cstdio>
+
+#ifdef DRAM_VIEWCMD
+FILE *g_dram_trace_file = NULL;
+#endif
 
 #ifdef DRAM_VERIFY
 int PRINT_CYCLE = 0;
@@ -290,12 +295,26 @@ void dram_t::scheduler_fifo() {
   a ^= b;
 
 void dram_t::cycle() {
+
+#if defined(DRAM_VIEWCMD) || defined(DRAM_VERIFY)
+  if (g_dram_trace_file == NULL) {
+      g_dram_trace_file = fopen("dram_trace.csv", "w");
+      if (g_dram_trace_file == NULL) {
+          printf("ERROR: Could not open dram_trace.csv for writing!\n");
+          exit(1); 
+      }
+      fprintf(g_dram_trace_file, "Cycle,Partition,Command,Bank,Row,Column\n");
+  }
+#endif
+
   if (!returnq->full()) {
     dram_req_t *cmd = rwq->pop();
     if (cmd) {
+
 #ifdef DRAM_VIEWCMD
-      printf("\tDQ: BK%d Row:%03x Col:%03x", cmd->bk, cmd->row,
-             cmd->col + cmd->dqbytes);
+    fprintf(g_dram_trace_file, "%llu,%u,DQ,%d,0x%x,0x%x\n", 
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, id, 
+            cmd->bk, cmd->row, cmd->col + cmd->dqbytes);
 #endif
       cmd->dqbytes += m_config->dram_atom_size;
 
@@ -455,7 +474,7 @@ void dram_t::cycle() {
     n_nop++;
     n_nop_partial++;
 #ifdef DRAM_VIEWCMD
-    printf("\tNOP                        ");
+    // printf("\tNOP                        ");
 #endif
   }
   if (k) {
@@ -587,8 +606,9 @@ bool dram_t::issue_col_command(int j) {
 
 #ifdef DRAM_VERIFY
       PRINT_CYCLE = 1;
-      printf("\tRD  Bk:%d Row:%03x Col:%03x \n", j, bk[j]->curr_row,
-             bk[j]->mrq->col + bk[j]->mrq->txbytes - m_config->dram_atom_size);
+      fprintf(g_dram_trace_file, "%llu,%u,RD,%d,0x%x,0x%x\n", 
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, id, j, 
+            bk[j]->curr_row, bk[j]->mrq->col + bk[j]->mrq->txbytes);
 #endif
       // transfer done
       if (!(bk[j]->mrq->txbytes < bk[j]->mrq->nbytes)) {
@@ -620,9 +640,9 @@ bool dram_t::issue_col_command(int j) {
         bwutil_partial += m_config->BL / m_config->data_command_freq_ratio;
 #ifdef DRAM_VERIFY
         PRINT_CYCLE = 1;
-        printf(
-            "\tWR  Bk:%d Row:%03x Col:%03x \n", j, bk[j]->curr_row,
-            bk[j]->mrq->col + bk[j]->mrq->txbytes - m_config->dram_atom_size);
+        fprintf(g_dram_trace_file, "%llu,%u,WR,%d,0x%x,0x%x\n", 
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, id, j, 
+            bk[j]->curr_row, bk[j]->mrq->col + bk[j]->mrq->txbytes);
 #endif
         // transfer done
         if (!(bk[j]->mrq->txbytes < bk[j]->mrq->nbytes)) {
@@ -646,8 +666,9 @@ bool dram_t::issue_row_command(int j) {
         !bk[j]->RCc) {  //
 #ifdef DRAM_VERIFY
       PRINT_CYCLE = 1;
-      printf("\tACT BK:%d NewRow:%03x From:%03x \n", j, bk[j]->mrq->row,
-             bk[j]->curr_row);
+      fprintf(g_dram_trace_file, "%llu,%u,ACT,%d,0x%x,0x%x\n", 
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, id, j, 
+            bk[j]->mrq->row, bk[j]->mrq->col);
 #endif
       // activate the row with current memory request
       bk[j]->curr_row = bk[j]->mrq->row;
@@ -678,7 +699,9 @@ bool dram_t::issue_row_command(int j) {
         n_pre_partial++;
 #ifdef DRAM_VERIFY
         PRINT_CYCLE = 1;
-        printf("\tPRE BK:%d Row:%03x \n", j, bk[j]->curr_row);
+        fprintf(g_dram_trace_file, "%llu,%u,PRE,%d,0x%x,0x0\n", 
+            m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, id, j, 
+            bk[j]->curr_row);
 #endif
       }
   }
