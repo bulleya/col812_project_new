@@ -17,3 +17,5 @@ hw_run/
 gpu-app-collection/
 stats.csv
 sass_stats.csv
+*.log
+gpgpu_inst_stats.txt
