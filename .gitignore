@@ -19,3 +19,8 @@ stats.csv
 sass_stats.csv
 *.log
 gpgpu_inst_stats.txt
+.devcontainer
+dram_trace.csv
+*.log
+hw_run/
+*.tar.gz
